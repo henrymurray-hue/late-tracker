@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Henry Meeting Punctuality</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+    h1 { margin-bottom: 6px; }
+    .sub { color: #555; margin-top: 0; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 16px 0; }
+    label { display:block; font-size: 14px; margin: 10px 0 6px; color: #333; }
+    input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 10px; font-size: 16px; }
+    .row { display:flex; gap: 10px; flex-wrap: wrap; }
+    button { padding: 12px 14px; border-radius: 12px; border: 1px solid #111; background: #111; color: #fff; font-size: 16px; cursor: pointer; }
+    button.secondary { background: #fff; color: #111; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .stats { display:flex; gap: 14px; flex-wrap: wrap; }
+    .stat { padding: 10px 12px; border: 1px solid #eee; border-radius: 12px; background: #fafafa; }
+    .msg { margin-top: 10px; color: #0a6; }
+    .err { margin-top: 10px; color: #b00; }
+    small { color: #666; }
+  </style>
+</head>
+
+<body>
+  <h1>Henry – Meeting Punctuality</h1>
+  <p class="sub">Tap once per meeting. Each “late” adds €10 to charity.</p>
+
+  <div class="card">
+    <div class="stats">
+      <div class="stat"><strong>Late</strong> <span id="lateCount">–</span></div>
+      <div class="stat"><strong>On time</strong> <span id="onTimeCount">–</span></div>
+      <div class="stat"><strong>€ to donate</strong> <span id="donationTotal">–</span></div>
+    </div>
+    <small>Donation total is calculated as late × 10. Donation payment is manual unless you wire it up later.</small>
+  </div>
+
+  <div class="card">
+    <label>Meeting (optional)</label>
+    <input id="meeting" placeholder="e.g. Weekly leadership sync" />
+
+    <label>Your name (optional)</label>
+    <input id="reporter" placeholder="e.g. Alex" />
+
+    <label>Shared passcode (required)</label>
+    <input id="secret" type="password" placeholder="Ask Henry" />
+
+    <label>Note (optional)</label>
+    <input id="note" placeholder="e.g. 4 minutes late" />
+
+    <div class="row" style="margin-top:12px;">
+      <button id="lateBtn">Henry was late (+€10)</button>
+      <button id="onTimeBtn" class="secondary">Henry was on time</button>
+      <button id="refreshBtn" class="secondary">Refresh stats</button>
+    </div>
+
+    <div id="feedback"></div>
+  </div>
+
+  <script>
+    // 1) Paste your Apps Script Web App URL here
+    const API_URL = https://script.google.com/macros/s/AKfycbz3_4DLCIsCKFzA3bt-Knrxja-jcMkEb9z-qwmT425dmWAg33sGlnQDCR2PjtvOit9w4w/exec;
+  
+
+    const lateCountEl = document.getElementById("lateCount");
+    const onTimeCountEl = document.getElementById("onTimeCount");
+    const donationTotalEl = document.getElementById("donationTotal");
+    const feedbackEl = document.getElementById("feedback");
+
+    const meetingEl = document.getElementById("meeting");
+    const reporterEl = document.getElementById("reporter");
+    const secretEl = document.getElementById("secret");
+    const noteEl = document.getElementById("note");
+
+    const lateBtn = document.getElementById("lateBtn");
+    const onTimeBtn = document.getElementById("onTimeBtn");
+    const refreshBtn = document.getElementById("refreshBtn");
+
+    function setFeedback(msg, isError=false) {
+      feedbackEl.innerHTML = "";
+      const div = document.createElement("div");
+      div.className = isError ? "err" : "msg";
+      div.textContent = msg;
+      feedbackEl.appendChild(div);
+    }
+
+    function setBusy(isBusy) {
+      lateBtn.disabled = isBusy;
+      onTimeBtn.disabled = isBusy;
+      refreshBtn.disabled = isBusy;
+    }
+
+    async function fetchStats() {
+      try {
+        setBusy(true);
+        const res = await fetch(API_URL, { method: "GET" });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Failed to load stats");
+
+        lateCountEl.textContent = data.late;
+        onTimeCountEl.textContent = data.ontime;
+        donationTotalEl.textContent = "€" + (data.late * 10);
+        setFeedback("Stats updated.");
+      } catch (err) {
+        setFeedback(String(err), true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function logEvent(status) {
+      const secret = secretEl.value.trim();
+      if (!secret) {
+        setFeedback("Passcode is required.", true);
+        return;
+      }
+
+      const payload = {
+        secret,
+        status,
+        meeting: meetingEl.value.trim(),
+        reporter: reporterEl.value.trim(),
+        note: noteEl.value.trim(),
+      };
+
+      try {
+        setBusy(true);
+        setFeedback("Sending…");
+
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || "Failed to save");
+
+        setFeedback(status === "late" ? "Logged as late. €10 added." : "Logged as on time.");
+        noteEl.value = "";
+        await fetchStats();
+      } catch (err) {
+        setFeedback(String(err), true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    lateBtn.addEventListener("click", () => logEvent("late"));
+    onTimeBtn.addEventListener("click", () => logEvent("ontime"));
+    refreshBtn.addEventListener("click", fetchStats);
+
+    fetchStats();
+  </script>
+</body>
+</html>
